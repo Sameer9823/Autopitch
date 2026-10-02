@@ -5,7 +5,11 @@ import {
 } from "@openai/agents";
 
 import { pitchDeckAgent } from "@/lib/agents/pitch-deck-agent";
-import { PitchDeckSchema, type PitchDeck } from "@/lib/schemas/pitch-deck";
+import {
+  normalizePitchDeck,
+  PitchDeckSchema,
+  type PitchDeck,
+} from "@/lib/schemas/pitch-deck";
 
 /**
  * A friendly error when a guardrail blocks generation.
@@ -42,9 +46,15 @@ function getGuardrailReason(error: unknown): string {
   return "Pitch deck generation was blocked by a guardrail.";
 }
 
-/** Validate the agent's JSON output against our Zod schema. */
+/**
+ * Validate the agent's JSON output against our Zod schema.
+ *
+ * The SDK has already parsed the model output through the same schema, so this
+ * is a second, cheap assertion. `normalizePitchDeck` then fills in the derived
+ * `content` column that the model may have left empty.
+ */
 function parseAgentOutput(rawOutput: unknown): PitchDeck {
-  return PitchDeckSchema.parse(rawOutput);
+  return normalizePitchDeck(PitchDeckSchema.parse(rawOutput));
 }
 
 /**

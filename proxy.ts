@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { sanitizeNext } from "@/lib/auth/next-redirect";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+
+const AUTH_PATHS = new Set(["/login", "/signup"]);
 
 /**
  * Optimistic redirect layer only.
@@ -15,15 +18,20 @@ export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
 
-  const isAuthPage = pathname === "/login" || pathname === "/signup";
+  const isAuthPage = AUTH_PATHS.has(pathname);
 
-  if (isAuthPage && hasSession) {
-    return NextResponse.redirect(new URL("/", request.url));
+  if (isAuthPage) {
+    // Signed in users skip the auth pages; signed out users must be allowed to
+    // render them. Never redirect an auth page to itself.
+    if (hasSession) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+    return NextResponse.next();
   }
 
   if (!hasSession) {
     const url = new URL("/login", request.url);
-    url.searchParams.set("next", `${pathname}${search}`);
+    url.searchParams.set("next", sanitizeNext(`${pathname}${search}`));
     return NextResponse.redirect(url);
   }
 

@@ -53,9 +53,16 @@ const qualityCheckerAgent = new Agent({
 
 Return isValid: false if ANY of these are true:
 - Profanity, hate speech, or violent content
-- Placeholder text like "TBD", "lorem ipsum", "[insert here]", "coming soon"
+- Unresolved placeholder text like "TBD", "lorem ipsum", "[insert here]", "coming soon"
 - Slides with empty or meaningless filler content
 - Content that is clearly not a business pitch deck
+
+An honest gap is NOT a defect. The deck generator is explicitly instructed to
+mark any figure the founder did not supply by setting "placeholder": true on the
+metric block and using the value "Data needed". A "metric" block that has
+"placeholder": true and a value of "Data needed" is the correct, intended output
+— never reject a deck for containing one. Judge those blocks on whether the
+placeholder flag is actually set, not on the presence of the words.
 
 Otherwise return isValid: true.
 If invalid, explain why in the reason field.`,

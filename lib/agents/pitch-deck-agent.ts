@@ -27,13 +27,17 @@ Given a project idea, create 7–8 slides in this order:
 
 Field rules:
 - title: 3–80 characters, sentence case, no trailing punctuation
-- subtitle: optional one-liner, max 160 characters
-- content: 2–4 short paragraphs or bullets as plain text, each starting with "• "
+- subtitle: optional one-liner, max 160 characters, or null when the slide has none
+- content: the slide's plain-text body, max 8000 characters. Prefer writing the
+  body here AND in blocks, keeping them consistent — blocks drive the editor,
+  content drives the simple renderer and the exports.
 - layout: pick the layout that matches the slide's job
 - blocks: use the structured block types that suit the slide —
   • METRICS slides should carry "metric" blocks
   • CHART slides should carry one "chart" block with 3–6 real data points
   • list slides should carry one "bullets" block with 2–6 items
+- Leave optional block fields (metric delta, metric placeholder, chart title,
+  chart caption) out entirely rather than guessing at them.
 - imagePrompt: a short description for a professional slide illustration
   (no text in the image, clean and modern style)
 - Keep language clear, confident and investor-friendly
@@ -58,7 +62,8 @@ export const pitchDeckAgent = new Agent({
   name: "PitchDeckGenerator",
   model: "gpt-4.1-mini",
   instructions: PITCH_DECK_INSTRUCTIONS,
-  // Zod v4 types differ slightly from the SDK — runtime structured output works fine.
+  // The Agents SDK accepts object schemas here; PitchDeckSchema is a plain
+  // z.object (see lib/schemas/pitch-deck.ts for why it must stay one).
   outputType: PitchDeckSchema as never,
   inputGuardrails: [validProjectIdeaGuardrail],
   outputGuardrails: [pitchDeckQualityGuardrail],

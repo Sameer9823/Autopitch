@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { sanitizeNext } from "@/lib/auth/next-redirect";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import {
   createSession,
@@ -31,7 +32,8 @@ const signupSchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
-  password: z.string().min(1, "Enter your password."),
+  password: z.string().min(1, "Please enter your password."),
+  next: z.string().optional(),
 });
 
 export type AuthFormState =
@@ -109,6 +111,7 @@ export async function signInAction(
   const parsed = loginSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),
+    next: formData.get("next") || undefined,
   });
 
   if (!parsed.success) {
@@ -119,7 +122,7 @@ export async function signInAction(
     };
   }
 
-  const { email, password } = parsed.data;
+  const { email, password, next } = parsed.data;
   const user = await prisma.user.findUnique({ where: { email } });
 
   // Same message for unknown email and wrong password — do not reveal which.
@@ -141,7 +144,8 @@ export async function signInAction(
   const token = await createSession(user.id);
   await setSessionCookie(token);
 
-  redirect("/");
+  // Re-validated here as well: the hidden field is client-controllable.
+  redirect(sanitizeNext(next));
 }
 
 export async function signOutAction(): Promise<void> {

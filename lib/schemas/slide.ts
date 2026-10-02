@@ -52,24 +52,32 @@ export const BulletsBlockSchema = z.object({
   items: z.array(z.string().min(1).max(400)).min(1).max(8),
 });
 
+/**
+ * Optional block fields are `.nullish()`, not `.optional()`.
+ *
+ * OpenAI structured output represents an absent optional as an explicit
+ * `null` rather than omitting the key, so a plain `.optional()` produces
+ * `invalid_type: expected string, received null` on every model response that
+ * leaves the field out. `.nullish()` accepts both shapes.
+ */
 export const MetricBlockSchema = z.object({
   type: z.literal("metric"),
   label: z.string().min(1).max(60),
   value: z.string().min(1).max(40),
-  delta: z.string().max(40).optional(),
+  delta: z.string().max(40).nullish(),
   /**
    * True when the AI could not find this number in the founder's input.
    * Rendered as "Data needed" so we never show an invented metric as fact.
    */
-  placeholder: z.boolean().optional(),
+  placeholder: z.boolean().nullish(),
 });
 
 export const ChartBlockSchema = z.object({
   type: z.literal("chart"),
   chartType: ChartTypeSchema,
-  title: z.string().max(120).optional(),
+  title: z.string().max(120).nullish(),
   series: z.array(ChartSeriesPointSchema).min(1).max(12),
-  caption: z.string().max(300).optional(),
+  caption: z.string().max(300).nullish(),
 });
 
 export const CaptionBlockSchema = z.object({
