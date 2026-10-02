@@ -59,7 +59,7 @@ Return isValid: false if ANY of these are true:
 
 Otherwise return isValid: true.
 If invalid, explain why in the reason field.`,
-  outputType: QualityCheckSchema as any,
+  outputType: QualityCheckSchema,
 });
 
 /**

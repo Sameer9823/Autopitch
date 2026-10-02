@@ -96,6 +96,13 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return
+    // This is the upstream shadcn/ui pattern and the rule's documented
+    // exception: `onSelect` reads scroll capability from Embla, an external
+    // system this effect is synchronizing with. Seeding it here is what makes
+    // the prev/next buttons correct on first paint; the alternative (a
+    // `useSyncExternalStore` rewrite of the vendored component) is a far larger
+    // change to code we do not own, for no behavioural gain.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api)
     api.on("reInit", onSelect)
     api.on("select", onSelect)

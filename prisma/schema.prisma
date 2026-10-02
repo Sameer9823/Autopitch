@@ -1,7 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// RAISEVIA AI — Prisma schema
+//
+// This schema EXTENDS the original Deck/Slide foundation (see
+// prisma/migrations/20260906115053_init). Existing models are evolved in
+// place; new models are added alongside them. No duplicate models.
+//
+// NOTE: usage/billing is intentionally NOT modelled as plans or quotas.
+// See UsageEvent — it is an internal, append-only telemetry ledger only.
+// Nothing in the product surfaces it to users yet.
 
 generator client {
   provider = "prisma-client"
@@ -12,6 +17,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
 enum DeckStatus {
   PENDING
   GENERATING
@@ -19,27 +28,544 @@ enum DeckStatus {
   FAILED
 }
 
+/// Per-slide image pipeline state so the UI can show progress independently.
+enum ImageStatus {
+  NONE
+  QUEUED
+  GENERATING
+  READY
+  FAILED
+}
+
+enum DeckType {
+  PITCH_DECK
+  ONE_PAGER
+  DATA_ROOM
+  UPDATE
+}
+
+enum FundraisingStage {
+  BOOTSTRAP
+  PRE_SEED
+  SEED
+  SERIES_A
+  SERIES_B
+  GROWTH
+  LATER
+  UNKNOWN
+}
+
+enum SharePermission {
+  VIEW
+  VIEW_DOWNLOAD
+}
+
+enum ReviewStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+}
+
+enum QuestionCategory {
+  MARKET
+  PRODUCT
+  COMPETITION
+  TRACTION
+  BUSINESS_MODEL
+  REVENUE
+  GTM
+  FINANCIALS
+  TEAM
+  FUNDRAISING
+  RISKS
+}
+
+enum AssetType {
+  ONE_PAGER
+  EXECUTIVE_SUMMARY
+  COLD_EMAIL
+  ELEVATOR_PITCH
+  MEETING_SCRIPT
+  LANDING_PAGE
+}
+
+/// Internal telemetry only. Deliberately not a billing/plan/quota model.
+enum UsageEventType {
+  DECK_GENERATED
+  SLIDE_GENERATED
+  AI_GENERATION
+  IMAGE_GENERATION
+  AI_REVIEW
+  QA_SESSION
+  EXPORT
+  SHARE_VIEW
+  STORAGE
+}
+
+enum ExportFormat {
+  PDF
+  PPTX
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ---------------------------------------------------------------------------
+// Identity — session auth, replaceable by an external provider later
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  sessions      Session[]
+  memberships   WorkspaceMember[]
+  ownedDecks    Deck[]           @relation("DeckOwner")
+  brandKits     BrandKit[]
+  usageEvents   UsageEvent[]
+  savedTemplates DeckTemplate[]   @relation("TemplateAuthor")
+
+  @@index([email])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // SHA-256 of the opaque session token. The raw token only ever lives in
+  // the HTTP-only cookie, never in the database.
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members      WorkspaceMember[]
+  decks        Deck[]
+  brandKits    BrandKit[]
+  usageEvents  UsageEvent[]
+  assets       FundraisingAsset[]
+  templates    DeckTemplate[]
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Deck + Slide (evolved from the original foundation)
+// ---------------------------------------------------------------------------
+
 model Deck {
   id           String     @id @default(cuid())
   idea         String     @db.Text
   title        String?
   status       DeckStatus @default(PENDING)
   errorMessage String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  slides       Slide[]
+
+  // --- ownership (added) ---
+  userId      String
+  user        User      @relation("DeckOwner", fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  // --- fundraising metadata (added) ---
+  startupName  String?
+  deckType     DeckType         @default(PITCH_DECK)
+  stage        FundraisingStage @default(UNKNOWN)
+  askAmount    String?
+  currency     String?          @db.VarChar(8)
+  runwayMonths Int?
+  completion   Int              @default(0)
+  pitchScore   Int?
+  thumbnailUrl String?
+  archivedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slides           Slide[]
+  versions         DeckVersion[]
+  shares           DeckShare[]
+  views            DeckView[]
+  slideViews       SlideView[]
+  reviews          PitchReview[]
+  questions        InvestorQuestion[]
+  attempts         QuestionAttempt[]
+  assets           FundraisingAsset[]
+  usageEvents      UsageEvent[]
+  slideRevisions   SlideRevision[]
+  chatMessages     DeckChatMessage[]
+
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([status])
 }
 
 model Slide {
-  id          String   @id @default(cuid())
-  deckId      String
-  deck        Deck     @relation(fields: [deckId], references: [id], onDelete: Cascade)
-  order       Int
+  id     String @id @default(cuid())
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  order  Int
+
+  // --- original fields (kept, still authoritative for the simple render) ---
   title       String
-  content     String   @db.Text
-  imagePrompt String   @db.Text
+  content     String @db.Text
+  imagePrompt String @db.Text
   imageUrl    String?
-  createdAt   DateTime @default(now())
+
+  // --- editor fields (added) ---
+  subtitle     String?   @db.Text
+  layout       String    @default("CONTENT")
+  notes        String?   @db.Text
+  speakerNotes String?   @db.Text
+  caption      String?
+  label        String?
+  /// Structured, editable slide content: bullets, metrics, chart series, etc.
+  /// Typed by lib/schemas/slide.ts (SlideBlocksSchema).
+  blocks       Json      @default("[]")
+  chartType    String?   @db.VarChar(24)
+  chartData    Json?
+  /// Image pipeline state for THIS slide only (parallel generation).
+  imageStatus  ImageStatus @default(NONE)
+  imageError   String?
+  /// Set when the user hand-edits, so AI regeneration can preserve their work.
+  userEdited   Boolean   @default(false)
+  generationSource String? @db.VarChar(32)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  revisions  SlideRevision[]
+  views      SlideView[]
 
   @@index([deckId])
+  @@index([deckId, order])
+}
+
+// ---------------------------------------------------------------------------
+// Per-slide revision — powers "Keep Current / Use New Version" on regenerate
+// ---------------------------------------------------------------------------
+
+model SlideRevision {
+  id       String @id @default(cuid())
+  slideId  String
+  slide    Slide  @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  deckId   String
+  deck     Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  /// Full snapshot of the slide's editable state before/after a regeneration.
+  snapshot Json
+
+  status   String    @default("PENDING") // PENDING | ACCEPTED | DISCARDED
+  summary  String?   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([slideId])
+  @@index([deckId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Version history
+// ---------------------------------------------------------------------------
+
+model DeckVersion {
+  id      String @id @default(cuid())
+  deckId  String
+  deck    Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  number  Int
+
+  createdById String?
+  /// Human-readable change summary, e.g. "Reworked traction slide".
+  summary  String?   @db.Text
+  /// Complete snapshot: { slides: [...], meta: {...} }
+  snapshot Json
+  /// True for versions produced by restoring an older version, so history is
+  /// never rewritten — restoring appends a NEW version built from the old one.
+  isRestoredFrom Int?
+
+  createdAt DateTime @default(now())
+
+  @@unique([deckId, number])
+  @@index([deckId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Sharing + engagement analytics
+// ---------------------------------------------------------------------------
+
+model DeckShare {
+  id      String @id @default(cuid())
+  deckId  String
+  deck    Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  token       String @unique
+  permission  SharePermission @default(VIEW)
+  /// Owner can disable a link without deleting its analytics history.
+  revokedAt   DateTime?
+  expiresAt   DateTime?
+  viewCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  views DeckView[]
+
+  @@index([deckId])
+  @@index([token])
+  @@index([createdAt])
+}
+
+/// One session of an investor viewing a shared deck.
+/// Privacy-conscious: a coarse, non-reversible fingerprint of the visitor and
+/// no IP address, user agent, or raw personal data is ever stored.
+model DeckView {
+  id      String @id @default(cuid())
+  deckId  String
+  deck    Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  shareId String?
+  share   DeckShare? @relation(fields: [shareId], references: [id], onDelete: SetNull)
+
+  /// Hashed daily-rotating visitor key. Not reversible to a person or device.
+  visitorHash String
+  viewedAt    DateTime @default(now())
+  durationMs  Int      @default(0)
+  maxSlideOrder Int?
+  completed   Boolean  @default(false)
+
+  slideViews SlideView[]
+
+  @@index([deckId, viewedAt])
+  @@index([deckId, visitorHash])
+  @@index([shareId])
+}
+
+model SlideView {
+  id     String @id @default(cuid())
+  deckId  String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  viewId String
+  view   DeckView @relation(fields: [viewId], references: [id], onDelete: Cascade)
+  slideId String
+  slide  Slide  @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  order  Int
+
+  dwellMs Int      @default(0)
+  viewedAt DateTime @default(now())
+
+  @@index([viewId])
+  @@index([deckId, order])
+  @@index([slideId])
+}
+
+// ---------------------------------------------------------------------------
+// Investor review
+// ---------------------------------------------------------------------------
+
+model PitchReview {
+  id     String @id @default(cuid())
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  status       ReviewStatus @default(PENDING)
+  overallScore Int?
+  /// Full structured review, typed by lib/schemas/investor-review.ts.
+  payload      Json?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deckId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Investor questions + Q&A practice
+// ---------------------------------------------------------------------------
+
+model InvestorQuestion {
+  id     String @id @default(cuid())
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  question   String @db.Text
+  category   QuestionCategory
+  /// Why an investor may ask this — grounded in the actual deck.
+  rationale  String?  @db.Text
+  /// Order/title of the slide this question relates to, if any.
+  slideRef   String?  @db.VarChar(160)
+  difficulty Int      @default(3)
+
+  saved     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attempts QuestionAttempt[]
+
+  @@index([deckId, createdAt])
+  @@index([deckId, category])
+  @@index([saved])
+}
+
+model QuestionAttempt {
+  id         String @id @default(cuid())
+  deckId     String
+  deck       Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  questionId String
+  question   InvestorQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  answer String @db.Text
+
+  clarity      Int?
+  specificity  Int?
+  evidence     Int?
+  relevance    Int?
+  conciseness  Int?
+  overallScore Int?
+
+  /// Typed by lib/schemas/answer-evaluation.ts.
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([deckId, createdAt])
+  @@index([questionId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Brand kit + templates
+// ---------------------------------------------------------------------------
+
+model BrandKit {
+  id          String    @id @default(cuid())
+  name        String
+  logoUrl     String?
+  primaryColor   String? @db.VarChar(32)
+  secondaryColor String? @db.VarChar(32)
+  accentColor    String? @db.VarChar(32)
+  headingFont String? @db.VarChar(64)
+  bodyFont    String? @db.VarChar(64)
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  isDefault Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([workspaceId])
+}
+
+model DeckTemplate {
+  id          String    @id @default(cuid())
+  name        String
+  description String?   @db.Text
+  slideLayout Json      @default("[]")
+  thumbnailUrl String?
+  isPublic    Boolean   @default(false)
+
+  authorId  String?
+  author    User?      @relation("TemplateAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  workspaceId String?
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([isPublic])
+}
+
+// ---------------------------------------------------------------------------
+// Fundraising kit + chat
+// ---------------------------------------------------------------------------
+
+model FundraisingAsset {
+  id     String @id @default(cuid())
+  deckId String?
+  deck   Deck?  @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  type    AssetType
+  title   String
+  content String   @db.Text
+  /// True when the AI had to omit a fact because the deck does not contain it.
+  hasGaps Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deckId, type])
+  @@index([workspaceId, createdAt])
+}
+
+model DeckChatMessage {
+  id     String @id @default(cuid())
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+
+  role    String @db.VarChar(16) // user | assistant
+  content String @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([deckId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Usage ledger — internal only, never surfaced as pricing or billing
+// ---------------------------------------------------------------------------
+
+model UsageEvent {
+  id     String @id @default(cuid())
+  type   UsageEventType
+
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  deckId      String?
+  deck        Deck?      @relation(fields: [deckId], references: [id], onDelete: SetNull)
+
+  /// Coarse quantity for the event (1 deck, 7 slides, 1 export...).
+  quantity Int @default(1)
+  /// Bytes written to storage (images), when applicable.
+  bytes    Int @default(0)
+  /// Free-form context: model used, export format, source, etc.
+  meta     Json @default("{}")
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([deckId, createdAt])
+  @@index([type, createdAt])
 }

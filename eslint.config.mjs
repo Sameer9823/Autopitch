@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Agent Manager worktrees are independent checkouts, not part of this app.
+    // Linting them reports other sessions' in-progress code against this config.
+    ".kilo/**",
   ]),
 ]);
 

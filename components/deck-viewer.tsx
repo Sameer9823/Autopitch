@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
 import { DeckStatusBadge } from "@/components/deck-status-badge";
@@ -153,9 +154,11 @@ export function DeckViewer({ deckId }: { deckId: string }) {
                 <CarouselItem key={slide.id}>
                   <article className="overflow-hidden rounded-2xl border bg-card ring-1 ring-foreground/10">
                     {slide.imageUrl ? (
-                      <img
+                      <Image
                         src={slide.imageUrl}
                         alt={slide.title}
+                        width={1280}
+                        height={720}
                         className="aspect-video w-full object-cover"
                       />
                     ) : null}

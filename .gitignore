@@ -59,6 +59,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the template must be committed, or nobody can discover what config the
+# app needs. Without this, the later `.env*` rule above wins over the negation on
+# line 31 and `.env.example` is silently never tracked.
+!.env.example
 
 # vercel
 .vercel

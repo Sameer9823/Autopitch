@@ -1,34 +1,94 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Outfit, Raleway } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Inter } from "next/font/google";
+
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const ralewayHeading = Raleway({subsets:['latin'],variable:'--font-heading'});
+/**
+ * RAISEVIA AI
+ * "Build the deck. Prepare for the room. Raise with confidence."
+ */
 
-const outfit = Outfit({subsets:['latin'],variable:'--font-sans'});
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
   subsets: ["latin"],
+  variable: "--font-geist-mono",
+  display: "swap",
 });
 
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "AI Pitch Deck",
-  description: "Generate startup pitch decks with AI, Inngest, and ImageKit",
+  metadataBase: new URL(APP_URL),
+  title: {
+    default: "Raisevia AI — AI Fundraising Workspace for Founders",
+    template: "%s · Raisevia AI",
+  },
+  description:
+    "Create investor-ready pitch decks, review your story like an investor, practice tough fundraising questions, and share your deck with investors.",
+  applicationName: "Raisevia AI",
+  keywords: [
+    "pitch deck generator",
+    "fundraising workspace",
+    "investor review",
+    "pitch practice",
+    "startup fundraising",
+    "AI pitch deck",
+  ],
+  authors: [{ name: "Raisevia AI" }],
+  openGraph: {
+    type: "website",
+    url: APP_URL,
+    siteName: "Raisevia AI",
+    title: "Raisevia AI — AI Fundraising Workspace for Founders",
+    description:
+      "Create investor-ready pitch decks, review your story like an investor, practice tough fundraising questions, and share your deck with investors.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Raisevia AI — AI Fundraising Workspace for Founders",
+    description:
+      "Build the deck. Prepare for the room. Raise with confidence.",
+  },
+  robots: {
+    // The share viewer is intentionally reachable, but never indexed.
+    index: true,
+    follow: true,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b0b0c",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", outfit.variable, ralewayHeading.variable)}
+      data-scroll-behavior="smooth"
+      className={cn(
+        "h-full antialiased",
+        inter.variable,
+        geist.variable,
+        geistMono.variable,
+      )}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full bg-background font-sans text-foreground">
+        {children}
+      </body>
     </html>
   );
 }
